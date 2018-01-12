@@ -15,27 +15,35 @@ limitations under the License.
 ==============================================================================*/
 
 
-import java.util.List;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.awt.Graphics2D;
+import java.awt.Stroke;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.awt.image.DataBufferInt;
+import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Vector;
 
 import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
 
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfByte;
-import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.videoio.VideoCapture;
-import org.opencv.videoio.Videoio;
+import org.bytedeco.javacv.*;
 
-import interfaces.ConfigConstants;
+import static org.bytedeco.javacpp.opencv_core.IplImage;
+import static org.bytedeco.javacpp.opencv_core.cvFlip;
+import static org.bytedeco.javacpp.opencv_imgcodecs.cvSaveImage;
 
 public class Main implements Runnable {
-	final int INTERVAL = 1000;	
+	final int INTERVAL = 100;
+	CanvasFrame canvas = new CanvasFrame("Web Cam");
 	
     private static final int INPUT_SIZE = 300;
     private static final String modelDir = "D:\\Projects\\models\\ssd_mobilenet_v1_android_export.pb";
@@ -45,7 +53,8 @@ public class Main implements Runnable {
     
     
     private static TensorFlowDetector detector;
-    public Main(){    	
+    public Main(){
+    	canvas.setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
     }
     public static void main(String[] args) {
     	Main gs = new Main();
@@ -73,68 +82,50 @@ public class Main implements Runnable {
     	Vector<String> labels = getLabels(labelDir);
     	detector = new TensorFlowDetector(modelDir, labels, INPUT_SIZE);    	
     }
-    private static BufferedImage Mat2BufferedImage(Mat matrix) {        
-    	   MatOfByte mob=new MatOfByte();
-    	   Imgcodecs.imencode(".png", matrix, mob);
-    	   byte ba[]=mob.toArray();
-
-    	   BufferedImage bi = null;
-    	try {
-    	bi = ImageIO.read(new ByteArrayInputStream(ba));
-    	} catch (IOException e) {
-    	// TODO Auto-generated catch block
-    	e.printStackTrace();
-    	}
-    	   return bi;
-    	}
     public void run() {
-    		
-		VideoCapture capture =new VideoCapture(0);
-		
-		if(ConfigConstants.IS_FULL_HD_ENABLED) {
-			capture.set(Videoio.CAP_PROP_FRAME_WIDTH, ConfigConstants.CAM_FULL_HD_WIDTH);
-			capture.set(Videoio.CAP_PROP_FRAME_HEIGHT, ConfigConstants.CAM_FULL_HD_HEIGHT);
-		}else {
-			capture.set(Videoio.CAP_PROP_FRAME_WIDTH, ConfigConstants.CAM_HD_WIDTH);
-			capture.set(Videoio.CAP_PROP_FRAME_HEIGHT, ConfigConstants.CAM_HD_HEIGHT);
-		}
-		
-		capture.set(Videoio.CV_CAP_PROP_ZOOM, ConfigConstants.CAM_ZOOM_LEVEL);
-		
-		System.err.println(capture.get(3)+" cam set:"+capture.get(4));
-		
+    	FrameGrabber grabber = new VideoInputFrameGrabber(0);
+    	OpenCVFrameConverter.ToIplImage converter = new OpenCVFrameConverter.ToIplImage();
+    	Java2DFrameConverter paintConverter = new Java2DFrameConverter();
+        
+        
         int i = 0;    	    	  
 		try {
 			initialize();
-			Mat webcam_image=new Mat();  	
-			while (true) { 
-				if(capture.isOpened()){
-					capture.read(webcam_image);
-					if( !webcam_image.empty() ) {    		        	
-	                    
-	                	BufferedImage finalImage =Mat2BufferedImage(webcam_image);     	                	
-	                	BufferedImage cropImage = new BufferedImage(INPUT_SIZE, INPUT_SIZE, BufferedImage.TYPE_INT_RGB);
-	                	cropImage.getGraphics().drawImage(finalImage, 0, 0, null); 
-	                    ImageIO.write(cropImage, "jpg", new File((i++) + "-aa.jpg"));
-	                    
-	                    // recognizeImage
-	                    List<Classifier.Recognition> recognitions = detector.recognizeImage(cropImage);
-	                    System.out.println("Result length " + recognitions.size());
-	                    for (Classifier.Recognition recognition : recognitions) {
-	                        RectF rectF = recognition.getLocation();
-	                        System.out.println(recognition.getTitle() + " " + recognition.getConfidence() + ", " +
-	                                (int) rectF.left + " " + (int) rectF.top + " " + (int) rectF.right + " " + ((int) rectF.bottom));
-	                       
-	                    }			        				        
-			        } 
-				}				
-           
+			grabber.setImageWidth(300);
+            grabber.setImageHeight(300);
+			grabber.start();
+			
+			while (true) {                
+				Frame frame = grabber.grab();
+				                 
+                if (frame != null)
+                {
+                	IplImage img = converter.convert(frame);
+                    cvFlip(img, img, 1);
+                    Frame flippedFrame = converter.convert(img);
+                    
+                	BufferedImage finalImage =paintConverter.getBufferedImage(flippedFrame,1);                	                	
+                	BufferedImage cropImage = new BufferedImage(INPUT_SIZE, INPUT_SIZE, BufferedImage.TYPE_INT_RGB);
+                	cropImage.getGraphics().drawImage(finalImage, 0, 0, null); 
+                    ImageIO.write(cropImage, "jpg", new File("abc.png"));
+                    canvas.showImage(cropImage);
+                    cvSaveImage((i++) + "-aa.jpg", img);
+                    
+                    // recognizeImage
+                    List<Classifier.Recognition> recognitions = detector.recognizeImage(cropImage);
+                    System.out.println("Result length " + recognitions.size());
+                    for (Classifier.Recognition recognition : recognitions) {
+                        RectF rectF = recognition.getLocation();
+                        System.out.println(recognition.getTitle() + " " + recognition.getConfidence() + ", " +
+                                (int) rectF.left + " " + (int) rectF.top + " " + (int) rectF.right + " " + ((int) rectF.bottom));
+                       
+                    }
+                }                
                 //save
                 
                 Thread.sleep(INTERVAL);
 
-            }	
-			
+            }			
         	           
 //            Graphics2D graphics = convertedImg.createGraphics();
 //
@@ -158,11 +149,7 @@ public class Main implements Runnable {
 
         } catch (Exception e) {
             e.printStackTrace();
-            capture.release();
         }
     	
-    }    
-    
-    
-
+    }
 }
