@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Built-By: arpit.sharma1
+Class-Path: lib/tensorflow-1.1.0-rc2.jar lib/libtensorflow-1.1.0-rc2.j
+ ar lib/libtensorflow_jni-1.1.0-rc2.jar lib/opencvjar-3.0.0.jar lib/op
+ encvjar-runtime-3.0.0-natives-windows-x86.jar
+Build-Jdk: 1.8.0_151
+Created-By: Maven Integration for Eclipse
+Main-Class: com.emaraic.ObjectRecognition.Recognizer
+
